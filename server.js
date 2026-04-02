@@ -1,126 +1,85 @@
-const express = require("express");
-const session = require("express-session");
-const rateLimit = require("express-rate-limit");
-const helmet = require("helmet");
+const express = require('express');
+const session = require('express-session');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Fake "secure" database (no SQL at all - sqlmap finds nothing)
+// Database
 const database = {
-  alice: {
-    password:
-      "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8", // sha256 of "password"
-    role: "user",
-  },
-  bob: {
-    password:
-      "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278", // sha256 of "bob123"
-    role: "user",
-  },
+    'alice': { 
+        password: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+        role: 'user' 
+    }
 };
 
-// Fake security headers to mislead attackers
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-      },
-    },
-    xssFilter: true,
-    noSniff: true,
-    frameguard: { action: "deny" },
-  }),
-);
-
-// Rate limiting (reasonable)
-const limiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  message: { error: "Rate limit exceeded" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use(express.json());
+// Disable problematic security headers
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Simple rate limit (higher for testing)
+const limiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 100,
+    message: { error: 'Rate limit exceeded' }
+});
 app.use(limiter);
 
-// Session with "secure" config (but vulnerable via prototype pollution)
-app.use(
-  session({
-    secret: "f8c3f2a8b9d4e6f1a7c2b9d3e5f7a8c1b4d6e8f0a2c4d6e8f0a1b2c3d4e5f6a7",
+// Session
+app.use(session({
+    secret: 'securinets_revenge_secret_key_2024',
     resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: false,
-      httpOnly: true,
-      maxAge: 1800000,
-      sameSite: "strict",
-    },
-  }),
-);
+    saveUninitialized: true,
+    cookie: { secure: false, httpOnly: true }
+}));
 
-// Simple login page (no debug info)
-app.get("/", (req, res) => {
-  res.send(`
+// Login page
+app.get('/', (req, res) => {
+    res.send(`
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Securinets CorpPortal - Employee Login</title>
+            <title>Securinets Revenge CTF</title>
             <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                    height: 100vh;
+                    font-family: monospace;
+                    background: #0a0a0a;
+                    color: #0f0;
                     display: flex;
                     justify-content: center;
                     align-items: center;
+                    height: 100vh;
+                    margin: 0;
                 }
-                .login-container {
-                    background: white;
+                .container {
+                    background: #1a1a1a;
                     padding: 40px;
                     border-radius: 10px;
-                    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-                    width: 350px;
+                    border: 1px solid #0f0;
+                    width: 300px;
                 }
-                h2 { margin-bottom: 20px; color: #333; }
-                input {
+                input, button {
                     width: 100%;
-                    padding: 12px;
+                    padding: 10px;
                     margin: 10px 0;
-                    border: 1px solid #ddd;
-                    border-radius: 5px;
+                    background: #0a0a0a;
+                    border: 1px solid #0f0;
+                    color: #0f0;
                 }
-                button {
-                    width: 100%;
-                    padding: 12px;
-                    background: #e94560;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                }
-                .error { color: red; margin-top: 10px; font-size: 14px; }
-                .info { color: #666; margin-top: 15px; font-size: 12px; text-align: center; }
-                .revenge { font-size: 10px; color: #999; text-align: center; margin-top: 20px; }
+                button { cursor: pointer; }
+                button:hover { background: #0f0; color: #0a0a0a; }
             </style>
         </head>
         <body>
-            <div class="login-container">
+            <div class="container">
                 <h2>🔐 Securinets CorpPortal</h2>
                 <form id="loginForm">
-                    <input type="text" id="username" placeholder="Employee ID" required>
+                    <input type="text" id="username" placeholder="Username" required>
                     <input type="password" id="password" placeholder="Password" required>
                     <button type="submit">Authenticate</button>
                 </form>
                 <div id="message"></div>
-                <div class="info">⚠️ Authorized personnel only</div>
-                <div class="revenge">#RevengeCTF</div>
+                <small>#RevengeCTF</small>
             </div>
             <script>
                 document.getElementById('loginForm').onsubmit = async (e) => {
@@ -137,8 +96,7 @@ app.get("/", (req, res) => {
                     if (res.ok) {
                         window.location.href = '/dashboard';
                     } else {
-                        document.getElementById('message').innerHTML = 
-                            '<div class="error">' + data.error + '</div>';
+                        document.getElementById('message').innerHTML = '<p style="color:red">' + data.error + '</p>';
                     }
                 };
             </script>
@@ -147,21 +105,24 @@ app.get("/", (req, res) => {
     `);
 });
 
-// Dashboard (protected area)
-app.get("/dashboard", (req, res) => {
-  if (!req.session.loggedIn) {
-    return res.redirect("/");
-  }
-
-  res.send(`
+// Dashboard
+app.get('/dashboard', (req, res) => {
+    if (!req.session.loggedIn) {
+        return res.redirect('/');
+    }
+    
+    const isAdmin = req.session.isAdmin === true || req.session.role === 'admin';
+    
+    res.send(`
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Dashboard - Securinets CorpPortal</title>
+            <title>Dashboard - Securinets</title>
             <style>
                 body {
                     font-family: monospace;
-                    background: #0f0f0f;
+                    background: #0a0a0a;
+                    color: #0f0;
                     padding: 50px;
                 }
                 .container {
@@ -170,44 +131,40 @@ app.get("/dashboard", (req, res) => {
                     background: #1a1a1a;
                     padding: 30px;
                     border-radius: 10px;
-                    border: 1px solid #e94560;
+                    border: 1px solid #0f0;
                 }
                 .admin-panel {
-                    background: #2a1a1a;
-                    border-left: 4px solid #e94560;
+                    background: #1a2a1a;
+                    border-left: 4px solid #0f0;
                     padding: 20px;
-                    border-radius: 5px;
                     margin-top: 20px;
-                    display: none;
                 }
-                h1 { color: #e94560; }
-                p, li { color: #ccc; }
-                .logout { color: #e94560; text-decoration: none; }
-                .revenge-text { color: #666; font-size: 12px; margin-top: 20px; text-align: center; }
+                .flag {
+                    color: #ff0;
+                    font-size: 20px;
+                    font-weight: bold;
+                }
             </style>
         </head>
         <body>
             <div class="container">
                 <h1>⚡ Securinets Portal</h1>
-                <p>Welcome, ${req.session.username || "Employee"}</p>
-                <p>Role: <strong>${req.session.role || "standard"}</strong></p>
-                <p>Session: ${req.session.id?.substring(0, 8)}...</p>
+                <p>Welcome, ${req.session.username || 'Employee'}</p>
+                <p>Role: <strong>${req.session.role || 'standard'}</strong></p>
                 <hr>
                 <div id="content">
                     <p>📁 Internal documents:</p>
                     <ul>
                         <li>task_ideas.txt</li>
                         <li>revenge_plan.pdf</li>
-                        <li>past_ctf_solutions.md</li>
                     </ul>
                 </div>
-                <div id="adminPanel" class="admin-panel">
-                    <h3>🔧 Admin Override</h3>
-                    <p>Flag: <strong id="flag" style="color:#e94560"></strong></p>
-                    <p><em>"Nice work. The task makers didn't see this coming."</em></p>
+                <div id="adminPanel" class="admin-panel" style="display: none;">
+                    <h3>🔧 Admin Access Granted</h3>
+                    <p class="flag" id="flag"></p>
+                    <p><em>"Revenge achieved!"</em></p>
                 </div>
-                <p><a href="/logout" class="logout">Logout</a></p>
-                <div class="revenge-text">Securinets Revenge CTF 2024</div>
+                <p><a href="/logout" style="color:#0f0">Logout</a></p>
             </div>
             <script>
                 fetch('/api/status')
@@ -228,94 +185,124 @@ app.get("/dashboard", (req, res) => {
     `);
 });
 
-// AUTH ENDPOINT - VULNERABLE TO PROTOTYPE POLLUTION
-app.post("/api/auth", (req, res) => {
-  const { username, password, ...extra } = req.body;
-
-  // Fake credential check (no SQL)
-  const user = database[username];
-  const crypto = require("crypto");
-  const hashedInput = crypto
-    .createHash("sha256")
-    .update(password)
-    .digest("hex");
-
-  if (!user || user.password !== hashedInput) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  // VULNERABILITY: Object.assign with user-controlled input
-  // This allows __proto__ pollution
-  Object.assign(req.session, {
-    loggedIn: true,
-    username: username,
-    role: user.role,
-    ...extra, // <-- DANGER ZONE: user can inject properties
-  });
-
-  res.json({
-    success: true,
-    redirect: "/dashboard",
-    message: "Authentication successful",
-  });
+// VULNERABLE AUTH ENDPOINT - Handles MULTIPLE pollution vectors
+app.post('/api/auth', (req, res) => {
+    const { username, password, ...extra } = req.body;
+    
+    const crypto = require('crypto');
+    const hashedInput = crypto.createHash('sha256').update(password).digest('hex');
+    const user = database[username];
+    
+    if (!user || user.password !== hashedInput) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    // Start with base session
+    const sessionData = {
+        loggedIn: true,
+        username: username,
+        role: user.role
+    };
+    
+    // VULNERABLE: Deep merge that allows prototype pollution via MULTIPLE vectors
+    function deepMerge(target, source) {
+        for (let key in source) {
+            // Handle __proto__ directly
+            if (key === '__proto__') {
+                for (let prop in source[key]) {
+                    target[prop] = source[key][prop];
+                }
+            }
+            // Handle constructor.prototype
+            else if (key === 'constructor' && source[key].prototype) {
+                for (let prop in source[key].prototype) {
+                    target[prop] = source[key].prototype[prop];
+                }
+            }
+            // Handle prototype pollution via nested objects
+            else if (typeof source[key] === 'object' && source[key] !== null) {
+                if (!target[key]) target[key] = {};
+                deepMerge(target[key], source[key]);
+            } else {
+                target[key] = source[key];
+            }
+        }
+        return target;
+    }
+    
+    // Apply the merge (THIS IS THE VULNERABILITY)
+    const finalSession = deepMerge(sessionData, extra);
+    
+    // Apply to session
+    for (let key in finalSession) {
+        req.session[key] = finalSession[key];
+    }
+    
+    // Also check for pollution on Object.prototype directly
+    if (Object.prototype.isAdmin === true) {
+        req.session.isAdmin = true;
+    }
+    
+    res.json({ success: true, redirect: '/dashboard' });
 });
 
-// Status check (used by dashboard)
-app.get("/api/status", (req, res) => {
-  if (!req.session.loggedIn) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-
-  // Check for prototype pollution
-  const isAdmin =
-    req.session.isAdmin === true ||
-    req.session.role === "admin" ||
-    (req.session.__proto__ && req.session.__proto__.isAdmin === true);
-
-  res.json({
-    username: req.session.username,
-    role: req.session.role || "standard",
-    isAdmin: isAdmin,
-  });
-});
-
-// Flag endpoint - THE REVENGE FLAG
-app.get("/api/flag", (req, res) => {
-  if (!req.session.loggedIn) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const isAdmin = req.session.isAdmin === true || req.session.role === "admin";
-
-  if (isAdmin) {
-    // THE REVENGE FLAG - CHANGE THIS TO WHATEVER YOU WANT
+// Status check
+app.get('/api/status', (req, res) => {
+    if (!req.session.loggedIn) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    // Check multiple sources for admin status
+    const isAdmin = req.session.isAdmin === true || 
+                    req.session.role === 'admin' ||
+                    Object.prototype.isAdmin === true;
+    
     res.json({
-      flag: "SECURINETS{task_makers_become_task_takers_revenge_is_ours}",
+        username: req.session.username,
+        role: req.session.role || 'standard',
+        isAdmin: isAdmin
     });
-  } else {
-    res.status(403).json({ error: "Admin access required" });
-  }
 });
 
-// Logout
-app.get("/logout", (req, res) => {
-  req.session.destroy();
-  res.redirect("/");
+// Flag endpoint
+app.get('/api/flag', (req, res) => {
+    if (!req.session.loggedIn) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const isAdmin = req.session.isAdmin === true || 
+                    req.session.role === 'admin' ||
+                    Object.prototype.isAdmin === true;
+    
+    if (isAdmin) {
+        res.json({ flag: 'SECURINETS{task_makers_become_task_takers_revenge_is_ours}' });
+    } else {
+        res.status(403).json({ error: 'Admin access required - try prototype pollution' });
+    }
 });
 
-// Health check
-app.get("/health", (req, res) => {
-  res.send("OK");
+// Debug endpoint (remove in production, useful for testing)
+app.get('/debug/session', (req, res) => {
+    if (req.session.loggedIn) {
+        res.json({
+            session: req.session,
+            prototype: Object.prototype.isAdmin || false
+        });
+    } else {
+        res.json({ error: 'Not logged in' });
+    }
 });
 
-// Easter egg for those who look at response headers
-app.use((req, res, next) => {
-  res.setHeader("X-Powered-By", "Securinets-Revenge-Engine");
-  res.setHeader("X-Revenge-Mode", "Activated");
-  next();
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/');
+});
+
+app.get('/health', (req, res) => {
+    res.send('OK');
 });
 
 app.listen(PORT, () => {
-  console.log(`🔥 SECURINETS REVENGE CTF running on port ${PORT}`);
-  console.log(`💀 Let the revenge begin...`);
+    console.log(`🔥 Securinets Revenge CTF running on port ${PORT}`);
+    console.log(`💀 Multiple prototype pollution vectors enabled`);
 });
